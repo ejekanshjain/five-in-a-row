@@ -9,7 +9,7 @@ import { loadGame } from '@/lib/server/store'
 
 export default function GamePage({ params }: PageProps<'/game/[id]'>) {
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-4 py-8">
+    <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 px-4 py-8 lg:max-w-5xl">
       <Suspense fallback={<p className="text-muted">Loading game…</p>}>
         <Room params={params} />
       </Suspense>
@@ -24,8 +24,5 @@ async function Room({ params }: Pick<PageProps<'/game/[id]'>, 'params'>) {
   const game = await loadGame(id)
   if (!game) notFound()
 
-  const you = seatOf(game, await getPlayerId())
-  return (
-    <GameRoom key={id} initialGame={toPublic(game)} initialYou={you} initialPower={you ? game.powers[you] : null} />
-  )
+  return <GameRoom key={id} initialGame={toPublic(game)} initialYou={seatOf(game, await getPlayerId())} />
 }

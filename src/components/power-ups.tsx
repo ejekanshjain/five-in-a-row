@@ -1,23 +1,23 @@
 'use client'
 
+import { Disc } from '@/components/disc'
 import type { PowerKind, PublicGame, Seat } from '@/lib/game'
 
-export type PowerMode = 'drop' | 'hammer' | 'brick'
+export type PowerMode = 'drop' | 'hammer'
 
 export const POWER_INFO: Record<PowerKind, { name: string; description: string; aim?: string }> = {
   hammer: {
     name: 'Hammer',
-    description: 'Smash any disc or brick. Everything above it falls one space.',
-    aim: 'Pick a disc or brick to smash. Press Esc to cancel.'
-  },
-  brick: {
-    name: 'Brick',
-    description: 'Drop a stone that belongs to nobody. It blocks lines for the rest of the round.',
-    aim: 'Pick a column for your brick. Press Esc to cancel.'
+    description: 'Smash any disc. Everything above it falls one space.',
+    aim: 'Pick a disc to smash. Press Esc to cancel.'
   },
   flip: {
     name: 'Gravity Flip',
     description: 'Turn the board upside down. Every column falls back in reverse order.'
+  },
+  four: {
+    name: 'Four in a Row',
+    description: 'Four in a row wins from now until the round ends. You still drop a disc this turn.'
   }
 }
 
@@ -40,11 +40,10 @@ export function PowerIcon({ kind, className = '' }: { kind: PowerKind; className
       </svg>
     )
   }
-  if (kind === 'brick') {
+  if (kind === 'four') {
     return (
       <svg {...common}>
-        <rect x="3" y="6" width="18" height="12" rx="2" />
-        <path d="M3 12h18M10 6v6M14 12v6" />
+        <path d="M15 20V4L5 15h14" />
       </svg>
     )
   }
@@ -55,67 +54,61 @@ export function PowerIcon({ kind, className = '' }: { kind: PowerKind; className
   )
 }
 
-// The small round badge on a player card. Players see their own power-up; everyone else
-// sees a "?" until it's used.
-export function PowerBadge({ game, seat, you, power }: { game: PublicGame; seat: Seat; you: Seat | null; power: PowerKind | null }) {
-  const used = game.powerUsed[seat]
-  const known = used ?? (seat === you ? power : null)
-  const label = used
-    ? `Used ${POWER_INFO[used].name}`
-    : known
-      ? `Your secret power-up: ${POWER_INFO[known].name}`
-      : 'Secret power-up, not used yet'
-
-  return (
-    <span
-      title={label}
-      aria-label={label}
-      role="img"
-      className={`absolute -top-1.5 -right-1.5 grid size-6 place-items-center rounded-full border-[2.5px] border-line bg-win text-on-accent ${used ? 'opacity-45 grayscale' : ''}`}
-    >
-      {known ? <PowerIcon kind={known} className="size-3.5" /> : <span className="text-xs leading-none font-extrabold">?</span>}
-    </span>
-  )
-}
-
-type PanelProps = {
-  power: PowerKind
-  used: boolean
+type CardProps = {
+  game: PublicGame
+  seat: Seat
+  you: Seat | null
   canUse: boolean
   mode: PowerMode
   onUse: () => void
   onCancel: () => void
 }
 
-// Shows your secret power-up and the button to use it. Hammer and Brick switch the board into
-// aiming mode; Gravity Flip fires right away.
-export function PowerPanel({ power, used, canUse, mode, onUse, onCancel }: PanelProps) {
+// One player's power-up, visible to everyone. Your own card also has the button to use it:
+// The Hammer switches the board into aiming mode; the others fire right away.
+export function PowerCard({ game, seat, you, canUse, mode, onUse, onCancel }: CardProps) {
+  const power = game.powers[seat]
+  const player = game.players[seat]
+  if (!power || !player) return null
+
   const info = POWER_INFO[power]
-  const aiming = mode !== 'drop'
+  const used = !!game.powerUsed[seat]
+  const mine = seat === you
+  const aiming = mine && mode !== 'drop'
+  const finished = game.status === 'won' || game.status === 'draw'
 
   return (
-    <div className={`toy flex items-center gap-3 rounded-2xl bg-surface p-2.5 pr-3 ${used ? 'opacity-60' : ''}`}>
-      <span className="grid size-12 shrink-0 place-items-center rounded-xl border-3 border-line bg-win text-on-accent">
-        <PowerIcon kind={power} className="size-7" />
-      </span>
-      <div className="min-w-0 flex-1">
-        <p className="text-xs font-semibold text-muted">{used ? 'Used this round' : 'Your secret power-up'}</p>
-        <p className="font-extrabold">{info.name}</p>
-        <p className="text-sm text-muted">{aiming ? info.aim : info.description}</p>
+    <div className={`toy flex flex-col gap-2.5 rounded-2xl bg-surface p-3 transition-opacity ${used ? 'opacity-55' : ''}`}>
+      <div className="flex items-center gap-2 text-sm font-bold">
+        <Disc seat={seat} className="size-4 border-2" />
+        <span className="min-w-0 flex-1 truncate">{mine ? 'Your power-up' : `${player.name}'s power-up`}</span>
+        <span
+          className={`rounded-full border-2 border-line px-2 py-px text-xs font-extrabold ${used ? 'bg-surface text-muted' : 'bg-win text-on-accent'}`}
+        >
+          {used ? 'Used' : 'Ready'}
+        </span>
       </div>
-      {!used &&
+      <div className="flex items-center gap-3">
+        <span
+          className={`grid size-11 shrink-0 place-items-center rounded-xl border-3 border-line bg-win text-on-accent ${used ? 'grayscale' : ''}`}
+        >
+          <PowerIcon kind={power} className="size-6" />
+        </span>
+        <div className="min-w-0">
+          <p className="font-extrabold">{info.name}</p>
+          <p className="text-sm leading-snug text-muted">{aiming ? info.aim : info.description}</p>
+        </div>
+      </div>
+      {mine &&
+        !used &&
+        !finished &&
         (aiming ? (
-          <button onClick={onCancel} className="btn btn-plain shrink-0 text-sm">
+          <button onClick={onCancel} className="btn btn-plain text-sm">
             Cancel
           </button>
         ) : (
-          <button
-            onClick={onUse}
-            disabled={!canUse}
-            title={canUse ? undefined : 'You can use it on your turn.'}
-            className="btn shrink-0 bg-win text-sm text-on-accent"
-          >
-            Use {info.name}
+          <button onClick={onUse} disabled={!canUse} className="btn bg-win text-sm text-on-accent">
+            {canUse ? `Use ${info.name}` : `Use ${info.name} on Your Turn`}
           </button>
         ))}
     </div>

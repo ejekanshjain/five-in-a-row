@@ -56,15 +56,14 @@ test('rejects moves out of turn, into full columns, and with bad input', () => {
 test('rematch resets once both players ask, swaps who starts, and deals new power-ups', () => {
   const game = startedGame()
   play(game, [0, 0, 1, 1, 2, 2, 3, 3, 4])
-  requestRematch(game, 'p1', () => 'brick')
+  requestRematch(game, 'p1', () => 'flip')
   assert.equal(game.status, 'won')
-  requestRematch(game, 'p2', () => 'brick')
+  requestRematch(game, 'p2', () => 'flip')
   assert.equal(game.status, 'playing')
   assert.equal(game.turn, 'p2')
-  assert.equal(game.round, 2)
   assert.ok(game.board.every(cell => cell === null))
   assert.equal(game.score.p1, 1)
-  assert.deepEqual(game.powers, { p1: 'brick', p2: 'brick' })
+  assert.deepEqual(game.powers, { p1: 'flip', p2: 'flip' })
 })
 
 test('hammer smashes a disc, drops the column, and uses up the turn', () => {
@@ -86,7 +85,7 @@ test('a power-up works once per round and only on your turn', () => {
   applyMove(game, 'p1', 5)
   assert.throws(() => usePower(game, 'p2', at(BOTTOM, 5)), /already used/)
   applyMove(game, 'p2', 6)
-  assert.throws(() => usePower(game, 'p1', at(0, 0)), /disc or brick/)
+  assert.throws(() => usePower(game, 'p1', at(0, 0)), /disc to smash/)
 })
 
 // Fills columns from the bottom up. `stacks[col]` lists that column's cells, bottom first.
@@ -106,17 +105,6 @@ test('a hammer that completes the opponent line makes them win', () => {
   assert.equal(game.score.p1, 1)
 })
 
-test('brick drops like a disc and blocks lines', () => {
-  const game = startedGame('brick')
-  stackUp(game, { 0: ['p1'], 1: ['p1'], 2: ['p1'], 3: ['p1'] })
-  usePower(game, 'p1', 4)
-  assert.equal(game.board[at(BOTTOM, 4)], 'brick')
-  assert.equal(game.status, 'playing')
-  game.turn = 'p1'
-  applyMove(game, 'p1', 5)
-  assert.equal(game.status, 'playing')
-})
-
 test('gravity flip reverses every column, and the user wins when both get five', () => {
   const game = startedGame('flip')
   // After flipping, the bottom row is all p1 and the row above is all p2.
@@ -133,4 +121,38 @@ test('gravity flip reverses every column, and the user wins when both get five',
   assert.equal(game.board[at(BOTTOM - 2, 0)], null)
   assert.equal(game.winner, 'p1')
   assert.equal(game.powerUsed.p1, 'flip')
+})
+
+test('four in a row keeps your turn, then a line of four wins', () => {
+  const game = startedGame('four')
+  play(game, [0, 9, 1, 9, 2, 8])
+  usePower(game, 'p1', undefined)
+  assert.equal(game.winLength, 4)
+  assert.equal(game.turn, 'p1')
+  assert.equal(game.status, 'playing')
+  applyMove(game, 'p1', 3)
+  assert.equal(game.winner, 'p1')
+  assert.equal(game.winLine.length, 4)
+})
+
+test('four in a row wins right away with a four already on the board', () => {
+  const game = startedGame('four', 'four')
+  // p2 already has four across the bottom, blocked at both ends by p1.
+  stackUp(game, { 0: ['p1'], 1: ['p2'], 2: ['p2'], 3: ['p2'], 4: ['p2'], 5: ['p1'] })
+  usePower(game, 'p1', undefined)
+  assert.equal(game.winner, 'p2')
+  game.status = 'playing'
+  game.winner = null
+  game.turn = 'p2'
+  assert.throws(() => usePower(game, 'p2', undefined), /already wins/)
+})
+
+test('rematch resets the winning length to five', () => {
+  const game = startedGame('four')
+  usePower(game, 'p1', undefined)
+  applyMove(game, 'p1', 0)
+  game.status = 'draw'
+  requestRematch(game, 'p1', () => 'hammer')
+  requestRematch(game, 'p2', () => 'hammer')
+  assert.equal(game.winLength, 5)
 })

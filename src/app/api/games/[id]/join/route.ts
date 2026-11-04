@@ -5,7 +5,7 @@ import { drawPower } from '@/lib/server/powers'
 import { broadcast } from '@/lib/server/realtime'
 import { updateGame } from '@/lib/server/store'
 
-// Takes the open second seat, deals a secret power-up, and starts the game. Body: { name }.
+// Takes the open second seat, deals a power-up, and starts the game. Body: { name }.
 export const POST = route(async (request: Request, ctx: RouteContext<'/api/games/[id]/join'>) => {
   const { id } = await ctx.params
   checkGameId(id)
@@ -20,5 +20,5 @@ export const POST = route(async (request: Request, ctx: RouteContext<'/api/games
     game.status = 'playing'
   })
   await broadcast(game)
-  return Response.json({ game: toPublic(game), you: 'p2', power: game.powers.p2 })
+  return Response.json({ game: toPublic(game), you: 'p2' })
 })

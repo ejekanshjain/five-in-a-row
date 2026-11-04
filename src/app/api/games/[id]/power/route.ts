@@ -4,8 +4,8 @@ import { getPlayerId } from '@/lib/server/player'
 import { broadcast } from '@/lib/server/realtime'
 import { updateGame } from '@/lib/server/store'
 
-// Uses the caller's secret power-up. Body: { target } with a cell index for the hammer or a
-// column for the brick. The server decides which power-up the caller has, never the browser.
+// Uses the caller's power-up. Body: { target } with a cell index for the hammer.
+// The server decides which power-up the caller has, never the browser.
 export const POST = route(async (request: Request, ctx: RouteContext<'/api/games/[id]/power'>) => {
   const { id } = await ctx.params
   checkGameId(id)

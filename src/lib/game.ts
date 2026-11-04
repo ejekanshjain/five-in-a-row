@@ -5,18 +5,17 @@ export const ROWS = 8
 export const WIN_LENGTH = 5
 
 export type Seat = 'p1' | 'p2'
-// A brick is a neutral stone from the Brick power-up. It belongs to nobody and blocks lines.
-export type Cell = Seat | 'brick' | null
+export type Cell = Seat | null
 export type Status = 'waiting' | 'playing' | 'won' | 'draw'
 
-export type PowerKind = 'hammer' | 'brick' | 'flip'
-export const POWER_KINDS: PowerKind[] = ['hammer', 'brick', 'flip']
+export type PowerKind = 'hammer' | 'flip' | 'four'
+export const POWER_KINDS: PowerKind[] = ['hammer', 'flip', 'four']
 
 // The last thing that happened on the board, so browsers know what to animate and announce.
-// `index` is the cell a disc or brick landed in, or the cell the hammer smashed.
+// `index` is the cell a disc landed in, or the cell the hammer smashed.
 export type LastAction =
-  | { kind: 'drop' | 'brick' | 'hammer'; seat: Seat; index: number }
-  | { kind: 'flip'; seat: Seat }
+  | { kind: 'drop' | 'hammer'; seat: Seat; index: number }
+  | { kind: 'flip' | 'four'; seat: Seat }
 
 export type Player = { id: string; name: string }
 
@@ -34,16 +33,16 @@ export type Game = {
   lastAction: LastAction | null
   score: Record<Seat | 'draws', number>
   rematch: Seat[]
-  // Counts rounds, so browsers know when a rematch dealt them a new power-up.
-  round: number
-  // Each player's secret power-up for this round. Only its owner ever sees it.
+  // How many in a row wins this round. The Four in a Row power-up lowers it from 5 to 4.
+  winLength: number
+  // Each player's power-up for this round. Both players can see both.
   powers: Record<Seat, PowerKind | null>
-  // Which power-up each player used this round. Public, since using one reveals it.
+  // Which power-up each player has used this round.
   powerUsed: Record<Seat, PowerKind | null>
 }
 
-// What browsers receive: the game with player ids and secret power-ups stripped.
-export type PublicGame = Omit<Game, 'players' | 'powers'> & {
+// What browsers receive: the game with player ids stripped.
+export type PublicGame = Omit<Game, 'players'> & {
   players: Record<Seat, { name: string } | null>
 }
 
@@ -76,17 +75,15 @@ export function newGame(id: string, host: Player, power: PowerKind): Game {
     lastAction: null,
     score: { p1: 0, p2: 0, draws: 0 },
     rematch: [],
-    round: 1,
+    winLength: WIN_LENGTH,
     powers: { p1: power, p2: null },
     powerUsed: { p1: null, p2: null }
   }
 }
 
 export function toPublic(game: Game): PublicGame {
-  const { players, powers, ...rest } = game
-  void powers
   const strip = (p: Player | null) => (p ? { name: p.name } : null)
-  return { ...rest, players: { p1: strip(players.p1), p2: strip(players.p2) } }
+  return { ...game, players: { p1: strip(game.players.p1), p2: strip(game.players.p2) } }
 }
 
 export function seatOf(game: Game, playerId: string | null): Seat | null {
@@ -104,10 +101,10 @@ export function landingRow(board: Cell[], col: number): number {
   return -1
 }
 
-// Returns every cell in a run of WIN_LENGTH or more through `index`, or an empty array.
-export function findWinLine(board: Cell[], index: number): number[] {
+// Returns every cell in a run of `length` or more through `index`, or an empty array.
+export function findWinLine(board: Cell[], index: number, length = WIN_LENGTH): number[] {
   const seat = board[index]
-  if (!seat || seat === 'brick') return []
+  if (!seat) return []
   const row = Math.floor(index / COLS)
   const col = index % COLS
   const line: number[] = []
@@ -128,16 +125,16 @@ export function findWinLine(board: Cell[], index: number): number[] {
         c += dc * sign
       }
     }
-    if (run.length >= WIN_LENGTH) line.push(...run)
+    if (run.length >= length) line.push(...run)
   }
   return [...new Set(line)]
 }
 
-// Every cell that is part of a line of five for `seat`, anywhere on the board.
-function linesFor(board: Cell[], seat: Seat): number[] {
+// Every cell that is part of a winning line for `seat`, anywhere on the board.
+function linesFor(board: Cell[], seat: Seat, length: number): number[] {
   const cells = new Set<number>()
   board.forEach((cell, index) => {
-    if (cell === seat) findWinLine(board, index).forEach(i => cells.add(i))
+    if (cell === seat) findWinLine(board, index, length).forEach(i => cells.add(i))
   })
   return [...cells]
 }
@@ -153,11 +150,12 @@ function checkColumn(col: unknown): asserts col is number {
   }
 }
 
-// Ends the turn for `seat`: decides a win or draw, or passes the turn. Power-ups can rearrange
-// the board, so it checks both players. If both have five, the player who acted wins.
-function finishTurn(game: Game, seat: Seat) {
-  const mine = linesFor(game.board, seat)
-  const theirs = linesFor(game.board, other(seat))
+// Decides a win or draw after `seat` acts, then passes the turn unless `keepTurn` is set.
+// Power-ups can rearrange the board or change the rule, so it checks both players' lines
+// anywhere on the board. If both have a winning line, the player who acted wins.
+function finishTurn(game: Game, seat: Seat, keepTurn = false) {
+  const mine = linesFor(game.board, seat, game.winLength)
+  const theirs = linesFor(game.board, other(seat), game.winLength)
   const winner = mine.length ? seat : theirs.length ? other(seat) : null
 
   if (winner) {
@@ -168,7 +166,7 @@ function finishTurn(game: Game, seat: Seat) {
   } else if (game.board.every(Boolean)) {
     game.status = 'draw'
     game.score.draws++
-  } else {
+  } else if (!keepTurn) {
     game.turn = other(seat)
   }
 }
@@ -187,8 +185,9 @@ export function applyMove(game: Game, seat: Seat, col: unknown) {
   finishTurn(game, seat)
 }
 
-// Uses `seat`'s secret power-up in place of a move. `target` is a cell index for the hammer,
-// a column for the brick, and ignored for the flip. Throws GameError when it can't be used.
+// Uses `seat`'s power-up. Hammer and Gravity Flip replace your move; Four in a Row doesn't, so
+// you still drop a disc afterwards. `target` is a cell index for the hammer and ignored
+// otherwise. Throws GameError when the power-up can't be used.
 export function usePower(game: Game, seat: Seat, target: unknown) {
   checkTurn(game, seat)
   const power = game.powers[seat]
@@ -197,7 +196,7 @@ export function usePower(game: Game, seat: Seat, target: unknown) {
 
   if (power === 'hammer') {
     if (typeof target !== 'number' || !Number.isInteger(target) || !game.board[target]) {
-      throw new GameError('Pick a disc or brick to smash.')
+      throw new GameError('Pick a disc to smash.')
     }
     // Everything above the smashed cell falls one space.
     const col = target % COLS
@@ -206,12 +205,10 @@ export function usePower(game: Game, seat: Seat, target: unknown) {
     }
     game.board[col] = null
     game.lastAction = { kind: 'hammer', seat, index: target }
-  } else if (power === 'brick') {
-    checkColumn(target)
-    const row = landingRow(game.board, target)
-    if (row < 0) throw new GameError('That column is full. Pick another one.', 409)
-    game.board[row * COLS + target] = 'brick'
-    game.lastAction = { kind: 'brick', seat, index: row * COLS + target }
+  } else if (power === 'four') {
+    if (game.winLength === 4) throw new GameError('Four in a row already wins this round.', 409)
+    game.winLength = 4
+    game.lastAction = { kind: 'four', seat }
   } else {
     if (!game.board.some(Boolean)) throw new GameError('Gravity Flip needs discs on the board.', 409)
     // Turning the board over and letting it fall reverses each column's stack.
@@ -228,7 +225,7 @@ export function usePower(game: Game, seat: Seat, target: unknown) {
   }
 
   game.powerUsed[seat] = power
-  finishTurn(game, seat)
+  finishTurn(game, seat, power === 'four')
 }
 
 // Records a rematch request. Once both players ask, it resets the board, deals fresh power-ups
@@ -248,7 +245,7 @@ export function requestRematch(game: Game, seat: Seat, deal: () => PowerKind) {
   game.winLine = []
   game.lastAction = null
   game.rematch = []
-  game.round++
+  game.winLength = WIN_LENGTH
   game.powers = { p1: deal(), p2: deal() }
   game.powerUsed = { p1: null, p2: null }
 }

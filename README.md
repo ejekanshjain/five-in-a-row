@@ -4,13 +4,13 @@ A real-time, two-player game. Players take turns dropping discs into a 10 by 8 b
 
 ## Power-Ups
 
-At the start of each round, the server deals each player one secret power-up. Only its owner sees it until they use it. You can use it once per round, in place of dropping a disc:
+At the start of each round, the server deals each player one random power-up. Both players can see both power-ups. You can use yours once per round:
 
-- **Hammer:** smash any disc or brick. Everything above it falls one space.
-- **Brick:** drop a stone that belongs to nobody. It blocks lines for the rest of the round.
+- **Hammer:** smash any disc. Everything above it falls one space.
 - **Gravity Flip:** turn the board upside down. Every column falls back in reverse order.
+- **Four in a Row:** four in a row wins for the rest of the round, and any four already on the board wins right away. Unlike the others, you still drop a disc on the same turn.
 
-If a Hammer or Gravity Flip gives both players five in a row at once, the player who used it wins.
+If a power-up gives both players a winning line at once, the player who used it wins.
 
 ## How It Works
 
