@@ -1,0 +1,51 @@
+@import 'tailwindcss';
+
+@theme inline {
+  --color-bg: #0e1016;
+  --color-surface: #171a23;
+  --color-line: #262a36;
+  --color-muted: #8b90a0;
+  --color-board: #27347f;
+  --color-p1: #ff6b57;
+  --color-p2: #2ec4b6;
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --animate-drop: drop 420ms cubic-bezier(0.5, 0, 0.75, 1.15) both;
+  --animate-win: win 900ms ease-in-out infinite alternate;
+
+  @keyframes drop {
+    from {
+      transform: translateY(var(--drop-from));
+    }
+    to {
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes win {
+    from {
+      box-shadow: 0 0 0 0 rgb(255 255 255 / 0.9);
+    }
+    to {
+      box-shadow: 0 0 0 5px rgb(255 255 255 / 0.15);
+    }
+  }
+}
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--color-bg);
+  color: #eceef4;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
