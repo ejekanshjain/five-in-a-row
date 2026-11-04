@@ -1,6 +1,6 @@
 // Pure game rules shared by the server (which enforces them) and the browser (which renders them).
 
-export const COLS = 9
+export const COLS = 10
 export const ROWS = 8
 export const WIN_LENGTH = 5
 
@@ -115,7 +115,7 @@ export function findWinLine(board: Cell[], index: number): number[] {
 export function applyMove(game: Game, seat: Seat, col: unknown) {
   if (game.status !== 'playing') throw new GameError('The game is not in progress.', 409)
   if (game.turn !== seat) throw new GameError('It is not your turn.', 409)
-  if (typeof col !== 'number' || !Number.isInteger(col) || col < 0 || col >= COLS) throw new GameError('Pick a column from 1 to 9.')
+  if (typeof col !== 'number' || !Number.isInteger(col) || col < 0 || col >= COLS) throw new GameError('Pick a column from 1 to 10.')
 
   const row = landingRow(game.board, col)
   if (row < 0) throw new GameError('That column is full. Pick another one.', 409)

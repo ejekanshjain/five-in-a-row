@@ -1,44 +1,257 @@
 @import 'tailwindcss';
 
-@theme inline {
-  --color-bg: #0e1016;
-  --color-surface: #171a23;
-  --color-line: #262a36;
-  --color-muted: #8b90a0;
-  --color-board: #27347f;
-  --color-p1: #ff6b57;
-  --color-p2: #2ec4b6;
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-  --animate-drop: drop 420ms cubic-bezier(0.5, 0, 0.75, 1.15) both;
-  --animate-win: win 900ms ease-in-out infinite alternate;
-
-  @keyframes drop {
-    from {
-      transform: translateY(var(--drop-from));
-    }
-    to {
-      transform: translateY(0);
-    }
-  }
-
-  @keyframes win {
-    from {
-      box-shadow: 0 0 0 0 rgb(255 255 255 / 0.9);
-    }
-    to {
-      box-shadow: 0 0 0 5px rgb(255 255 255 / 0.15);
-    }
-  }
-}
+/* Theme comes from data-theme on <html>, set before first paint by the script in the root layout. */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
 
 :root {
-  color-scheme: dark;
+  --bg: #e9e4ff;
+  --peg: #cfc4ff;
+  --surface: #ffffff;
+  --fg: #1d1442;
+  --muted: #64599a;
+  --line: #1d1442;
+  --shadow: #1d1442;
+  --board: #3b2fd9;
+  --board-deep: #2a1fae;
+  --p1: #ff4f8b;
+  --p1-deep: #c81f60;
+  --p2: #1fd1a0;
+  --p2-deep: #0e9873;
+  --win: #ffe14d;
+  --on-accent: #1d1442;
+}
+
+[data-theme='dark'] {
+  --bg: #120d2b;
+  --peg: #251c55;
+  --surface: #1e1745;
+  --fg: #f3efff;
+  --muted: #a99fd8;
+  --line: #07041a;
+  --shadow: #07041a;
+  --board: #4a3cff;
+  --board-deep: #2f22c9;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
+  --color-board: var(--board);
+  --color-p1: var(--p1);
+  --color-p2: var(--p2);
+  --color-win: var(--win);
+  --color-on-accent: var(--on-accent);
+  --font-sans: var(--font-display);
 }
 
 body {
-  background: var(--color-bg);
-  color: #eceef4;
+  background-color: var(--bg);
+  background-image: radial-gradient(var(--peg) 2px, transparent 2.5px);
+  background-size: 22px 22px;
+  color: var(--fg);
+  transition: background-color 200ms;
+}
+
+@layer components {
+/* Chunky toy-like surfaces: thick outline plus a solid shadow straight down. */
+.toy {
+  border: 3px solid var(--line);
+  box-shadow: 0 5px 0 var(--shadow);
+}
+
+.btn {
+  border: 3px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 4px 0 var(--shadow);
+  font-weight: 700;
+  padding: 0.55rem 1.1rem;
+  transition:
+    transform 80ms,
+    box-shadow 80ms;
+}
+.btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 5px 0 var(--shadow);
+}
+.btn:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 var(--shadow);
+}
+.btn:disabled {
+  opacity: 0.55;
+}
+.btn-primary {
+  background: var(--p1);
+  color: var(--on-accent);
+}
+.btn-plain {
+  background: var(--surface);
+  color: var(--fg);
+}
+
+/* Glossy disc with a moulded inner ring. Set data-seat to pick the color. */
+.disc {
+  --c: var(--p1);
+  --c-deep: var(--p1-deep);
+  position: relative;
+  display: block;
+  border-radius: 9999px;
+  border: 2.5px solid var(--line);
+  background:
+    radial-gradient(circle at 32% 28%, rgb(255 255 255 / 0.65) 0 12%, transparent 30%), var(--c);
+  box-shadow: inset 0 -4px 0 var(--c-deep);
+}
+.disc[data-seat='p2'] {
+  --c: var(--p2);
+  --c-deep: var(--p2-deep);
+}
+.disc::after {
+  content: '';
+  position: absolute;
+  inset: 22%;
+  border-radius: 9999px;
+  border: 2px solid color-mix(in srgb, var(--c-deep) 55%, transparent);
+}
+
+.board {
+  background: var(--board);
+  border: 3px solid var(--line);
+  border-radius: 26px;
+  box-shadow:
+    inset 0 -6px 0 var(--board-deep),
+    0 8px 0 var(--shadow);
+}
+.hole {
+  border-radius: 9999px;
+  background: var(--bg);
+  box-shadow: inset 0 4px 0 rgb(0 0 0 / 0.28);
+}
+}
+
+/* Once someone wins, everything except the winning line fades back. */
+.board[data-won] .disc:not([data-win]) {
+  opacity: 0.28;
+  filter: saturate(0.4);
+  transition:
+    opacity 400ms 300ms,
+    filter 400ms 300ms;
+}
+.disc[data-win] {
+  z-index: 1;
+  animation: win-pulse 700ms ease-in-out 600ms infinite alternate;
+}
+/* The winning disc is usually the one that just dropped, so it needs both animations. */
+.drop[data-win] {
+  animation:
+    drop 560ms cubic-bezier(0.45, 0, 0.6, 1) both,
+    win-pulse 700ms ease-in-out 600ms infinite alternate;
+}
+.hero-drop[data-win] {
+  animation:
+    drop 700ms cubic-bezier(0.45, 0, 0.6, 1) calc(var(--i) * 110ms + 150ms) both,
+    win-pulse 700ms ease-in-out 1300ms infinite alternate;
+}
+
+.drop {
+  animation: drop 560ms cubic-bezier(0.45, 0, 0.6, 1) both;
+}
+.bob {
+  animation: bob 900ms ease-in-out infinite alternate;
+}
+.pop {
+  animation: pop 450ms cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+.hero-drop {
+  animation: drop 700ms cubic-bezier(0.45, 0, 0.6, 1) both;
+  animation-delay: calc(var(--i) * 110ms + 150ms);
+}
+
+.confetti-piece {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 10px;
+  height: 14px;
+  border: 2px solid var(--line);
+  border-radius: 3px;
+  animation: confetti 1600ms cubic-bezier(0.2, 0.7, 0.4, 1) both;
+  animation-delay: var(--delay);
+}
+
+@keyframes drop {
+  0% {
+    transform: translateY(var(--drop-from, -400%));
+  }
+  55% {
+    transform: translateY(0);
+  }
+  72% {
+    transform: translateY(-14%);
+  }
+  86% {
+    transform: translateY(0);
+  }
+  94% {
+    transform: translateY(-4%);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+@keyframes win-pulse {
+  from {
+    transform: scale(1);
+    box-shadow:
+      inset 0 -4px 0 var(--c-deep),
+      0 0 0 4px var(--win),
+      0 0 10px 4px var(--win);
+  }
+  to {
+    transform: scale(1.14);
+    box-shadow:
+      inset 0 -4px 0 var(--c-deep),
+      0 0 0 5px var(--win),
+      0 0 26px 10px var(--win);
+  }
+}
+
+@keyframes bob {
+  from {
+    transform: translateY(-8%);
+  }
+  to {
+    transform: translateY(8%);
+  }
+}
+
+@keyframes pop {
+  from {
+    transform: scale(0.6) rotate(-4deg);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1) rotate(0);
+    opacity: 1;
+  }
+}
+
+@keyframes confetti {
+  0% {
+    transform: translate(0, 0) rotate(0);
+    opacity: 1;
+  }
+  35% {
+    transform: translate(calc(var(--x) * 0.8), var(--y)) rotate(calc(var(--r) * 0.4));
+    opacity: 1;
+  }
+  100% {
+    transform: translate(var(--x), calc(var(--y) + 520px)) rotate(var(--r));
+    opacity: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -47,5 +260,9 @@ body {
   *::after {
     animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
+  .confetti-piece {
+    display: none;
   }
 }

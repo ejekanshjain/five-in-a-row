@@ -43,7 +43,7 @@ test('five on a diagonal wins', () => {
 test('rejects moves out of turn, into full columns, and with bad input', () => {
   const game = startedGame()
   assert.throws(() => applyMove(game, 'p2', 0), /not your turn/)
-  assert.throws(() => applyMove(game, 'p1', 9), /column/)
+  assert.throws(() => applyMove(game, 'p1', COLS), /column/)
   assert.throws(() => applyMove(game, 'p1', '3'), /column/)
   play(game, Array(ROWS).fill(0))
   assert.throws(() => applyMove(game, 'p1', 0), /full/)

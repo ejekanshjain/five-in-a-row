@@ -35,7 +35,7 @@ export function NameForm({ submitLabel, onSubmit }: { submitLabel: string; onSub
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-3">
-      <label htmlFor="name" className="text-sm font-medium">
+      <label htmlFor="name" className="font-bold">
         Your Name
       </label>
       <div className="flex gap-2">
@@ -47,17 +47,14 @@ export function NameForm({ submitLabel, onSubmit }: { submitLabel: string; onSub
           maxLength={20}
           autoComplete="nickname"
           placeholder="e.g. Priya"
-          className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 py-2 outline-none focus:border-white/40"
+          className="min-w-0 flex-1 rounded-[14px] border-3 border-line bg-surface px-3.5 py-2 text-lg font-semibold outline-none placeholder:text-muted/70 focus-visible:ring-4 focus-visible:ring-p1/40"
         />
-        <button
-          disabled={busy}
-          className="rounded-lg bg-white px-4 py-2 font-medium text-bg hover:bg-white/90 disabled:opacity-50"
-        >
+        <button disabled={busy} className="btn btn-primary shrink-0 text-lg">
           {submitLabel}
         </button>
       </div>
       {error && (
-        <p role="alert" className="text-sm text-p1">
+        <p role="alert" className="font-semibold text-p1">
           {error}
         </p>
       )}

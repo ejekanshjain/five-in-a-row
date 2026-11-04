@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Board } from '@/components/board'
 import { Disc } from '@/components/disc'
 import { NameForm } from '@/components/name-form'
+import { ThemeToggle } from '@/components/theme-toggle'
 import { postJson } from '@/lib/api'
 import { COLS, other, type PublicGame, type Seat } from '@/lib/game'
 import { gameChannel } from '@/lib/realtime'
@@ -81,46 +82,48 @@ export function GameRoom({ initialGame, initialYou }: Props) {
 
   const canMove = game.status === 'playing' && game.turn === you && !busy
 
-  // Number keys 1 to 9 drop a disc in that column.
+  // Keys 1 to 9 drop into those columns, and 0 drops into column 10.
   useEffect(() => {
     if (!canMove) return
     const onKey = (event: KeyboardEvent) => {
-      if (event.target instanceof HTMLInputElement) return
-      const col = Number(event.key) - 1
-      if (Number.isInteger(col) && col >= 0 && col < COLS) void send('move', { column: col })
+      if (event.target instanceof HTMLInputElement || !/^\d$/.test(event.key)) return
+      const col = event.key === '0' ? 9 : Number(event.key) - 1
+      if (col < COLS) void send('move', { column: col })
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [canMove, send])
 
-  const canJoin = !you && game.status === 'waiting' && !game.players.p2
+  const finished = game.status === 'won' || game.status === 'draw'
 
   return (
     <>
-      <header className="flex items-center justify-between">
-        <Link href="/" className="text-lg font-semibold tracking-tight">
-          5 in a Row
+      <header className="flex items-center justify-between gap-3">
+        <Link href="/" className="flex items-center gap-2 text-xl font-extrabold tracking-tight">
+          <Disc seat="p1" className="size-6" />5 in a Row
         </Link>
-        <CopyLink />
+        <div className="flex items-center gap-2">
+          {game.status !== 'waiting' && <CopyLink label="Copy Link" />}
+          <ThemeToggle />
+        </div>
       </header>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-4">
         <PlayerCard game={game} seat="p1" you={you} online={online.includes('p1')} />
+        <span className="text-lg font-extrabold text-muted">vs</span>
         <PlayerCard game={game} seat="p2" you={you} online={online.includes('p2')} />
       </div>
 
-      <section aria-live="polite" className="flex min-h-12 flex-col items-center gap-3 text-center">
-        <p className="text-lg font-medium">{headline(game, you)}</p>
-        {canJoin && (
+      <section aria-live="polite" className="flex min-h-20 flex-col items-center justify-center gap-3 text-center">
+        <Status game={game} you={you} />
+        {!you && game.status === 'waiting' && (
           <div className="w-full max-w-sm text-left">
             <NameForm submitLabel="Join Game" onSubmit={name => send('join', { name })} />
           </div>
         )}
-        {you && (game.status === 'won' || game.status === 'draw') && (
-          <RematchControls game={game} you={you} busy={busy} onRematch={() => send('rematch')} />
-        )}
+        {you && finished && <RematchControls game={game} you={you} busy={busy} onRematch={() => send('rematch')} />}
         {error && (
-          <p role="alert" className="text-sm text-p1">
+          <p role="alert" className="font-semibold text-p1">
             {error}
           </p>
         )}
@@ -128,51 +131,86 @@ export function GameRoom({ initialGame, initialYou }: Props) {
 
       <Board game={game} you={you} canMove={canMove} onDrop={col => send('move', { column: col })} />
 
-      {canMove && <p className="text-center text-sm text-muted">Click a column or press 1 to 9.</p>}
+      <p className="text-center text-sm text-muted">
+        {canMove ? 'Click a column, or press 1 to 9 (0 is column 10).' : 'Line up five across, down, or diagonally.'}
+        {game.score.draws > 0 && ` Draws so far: ${game.score.draws}.`}
+      </p>
     </>
   )
 }
 
-function headline(game: PublicGame, you: Seat | null): string {
+function Status({ game, you }: { game: PublicGame; you: Seat | null }) {
   const name = (seat: Seat) => game.players[seat]?.name ?? 'Player'
-  switch (game.status) {
-    case 'waiting':
-      return you ? 'Waiting for an opponent. Send this page link to a colleague.' : 'Join to play against ' + name('p1') + '.'
-    case 'playing':
-      if (game.turn === you) return 'Your turn.'
-      return you ? `Waiting for ${name(game.turn)} to move.` : `${name(game.turn)} to move.`
-    case 'won':
-      if (game.winner === you) return 'You win!'
-      return `${name(game.winner!)} wins.`
-    case 'draw':
-      return 'Draw. The board is full.'
+
+  if (game.status === 'won') {
+    const lost = you && game.winner !== you
+    return (
+      <div key={game.version} className="pop space-y-1">
+        <p className="text-4xl font-extrabold tracking-tight sm:text-5xl">
+          {game.winner === you ? 'You win!' : `${name(game.winner!)} wins!`}
+        </p>
+        {lost && <p className="text-muted">Ask for a rematch to get even.</p>}
+      </div>
+    )
   }
+  if (game.status === 'draw') {
+    return (
+      <div key={game.version} className="pop space-y-1">
+        <p className="text-4xl font-extrabold tracking-tight sm:text-5xl">Draw!</p>
+        <p className="text-muted">The board is full and nobody lined up five.</p>
+      </div>
+    )
+  }
+  if (game.status === 'waiting') {
+    if (!you) return <p className="text-xl font-bold">{name('p1')} is looking for an opponent.</p>
+    return (
+      <div className="flex flex-col items-center gap-3">
+        <p className="text-2xl font-extrabold tracking-tight">Waiting for an opponent</p>
+        <p className="text-muted">Send the link to a colleague. The game starts when they join.</p>
+        <CopyLink label="Copy Invite Link" primary />
+      </div>
+    )
+  }
+
+  const label = game.turn === you ? 'Your turn' : you ? `${name(game.turn)} is thinking…` : `${name(game.turn)}'s turn`
+  return (
+    <p
+      key={`${game.turn}-${game.version}`}
+      className="toy pop inline-flex items-center gap-2.5 rounded-full py-2 pr-5 pl-2.5 text-lg font-extrabold text-on-accent"
+      style={{ background: `var(--${game.turn})` }}
+    >
+      <Disc seat={game.turn} className="size-7 border-2" />
+      {label}
+    </p>
+  )
 }
 
 function PlayerCard({ game, seat, you, online }: { game: PublicGame; seat: Seat; you: Seat | null; online: boolean }) {
   const player = game.players[seat]
   const active = game.status === 'playing' && game.turn === seat
+  const winner = game.winner === seat
   return (
     <div
-      className={`flex items-center gap-3 rounded-xl border bg-surface p-3 transition-colors ${active ? 'border-white/50' : 'border-line'}`}
+      className={`toy flex min-w-0 items-center gap-2.5 rounded-2xl p-2.5 transition-all duration-200 sm:gap-3 sm:p-3 ${active ? '-translate-y-1.5 shadow-[0_9px_0_var(--shadow)]' : ''}`}
+      style={{
+        background: active || winner ? `color-mix(in srgb, var(--${seat}) 24%, var(--surface))` : 'var(--surface)'
+      }}
     >
-      <Disc seat={seat} className="size-8 shrink-0" />
+      <Disc seat={seat} className={`size-9 shrink-0 sm:size-11 ${active ? 'bob' : ''}`} />
       <div className="min-w-0 flex-1">
-        <p className="truncate font-medium">
-          {player?.name ?? 'Open seat'}
-          {seat === you && <span className="ml-1.5 text-xs text-muted">(you)</span>}
-        </p>
-        <p className="flex items-center gap-1.5 text-xs text-muted">
+        <p className="truncate font-extrabold">{player?.name ?? 'Open seat'}</p>
+        <p className="flex items-center gap-1.5 text-xs font-semibold text-muted">
           {player && (
             <span
-              className={`size-1.5 rounded-full ${online ? 'bg-emerald-400' : 'bg-muted/50'}`}
-              title={online ? 'Online' : 'Offline'}
+              className={`size-2 shrink-0 rounded-full border-[1.5px] border-line ${online ? 'bg-p2' : 'bg-transparent'}`}
             />
           )}
-          {player ? (online ? 'Online' : 'Offline') : 'Waiting to join'}
+          <span className="truncate">
+            {seat === you ? 'You' : player ? (online ? 'Online' : 'Offline') : 'Waiting to join'}
+          </span>
         </p>
       </div>
-      <p className="font-mono text-2xl font-semibold tabular-nums" aria-label={`${game.score[seat]} wins`}>
+      <p className="text-3xl font-extrabold tabular-nums sm:text-4xl" aria-label={`${game.score[seat]} wins`}>
         {game.score[seat]}
       </p>
     </div>
@@ -181,24 +219,20 @@ function PlayerCard({ game, seat, you, online }: { game: PublicGame; seat: Seat;
 
 function RematchControls({ game, you, busy, onRematch }: { game: PublicGame; you: Seat; busy: boolean; onRematch: () => void }) {
   const opponent = game.players[other(you)]?.name ?? 'Your opponent'
-  if (game.rematch.includes(you)) return <p className="text-sm text-muted">Waiting for {opponent} to accept the rematch.</p>
+  if (game.rematch.includes(you)) return <p className="font-semibold text-muted">Waiting for {opponent} to accept the rematch.</p>
 
   const asked = game.rematch.includes(other(you))
   return (
     <div className="flex flex-col items-center gap-2">
-      {asked && <p className="text-sm text-muted">{opponent} wants a rematch.</p>}
-      <button
-        onClick={onRematch}
-        disabled={busy}
-        className="rounded-lg bg-white px-4 py-2 font-medium text-bg hover:bg-white/90 disabled:opacity-50"
-      >
+      {asked && <p className="font-semibold">{opponent} wants a rematch.</p>}
+      <button onClick={onRematch} disabled={busy} className="btn btn-primary text-lg">
         {asked ? 'Accept Rematch' : 'Rematch'}
       </button>
     </div>
   )
 }
 
-function CopyLink() {
+function CopyLink({ label, primary }: { label: string; primary?: boolean }) {
   const [copied, setCopied] = useState(false)
   return (
     <button
@@ -207,9 +241,9 @@ function CopyLink() {
         setCopied(true)
         setTimeout(() => setCopied(false), 2000)
       }}
-      className="rounded-lg border border-line px-3 py-1.5 text-sm hover:bg-surface"
+      className={`btn ${primary ? 'btn-primary text-lg' : 'btn-plain text-sm'}`}
     >
-      {copied ? 'Link Copied' : 'Copy Game Link'}
+      {copied ? 'Link Copied' : label}
     </button>
   )
 }

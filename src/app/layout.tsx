@@ -1,10 +1,12 @@
 import type { Metadata } from 'next'
-import { Geist, Geist_Mono } from 'next/font/google'
+import { Bricolage_Grotesque } from 'next/font/google'
+
+import { InlineScript } from '@/components/inline-script'
+import { THEME_SCRIPT } from '@/lib/theme'
 
 import './globals.css'
 
-const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] })
-const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] })
+const display = Bricolage_Grotesque({ variable: '--font-display', subsets: ['latin'] })
 
 export const metadata: Metadata = {
   title: '5 in a Row',
@@ -13,7 +15,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<'/'>) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
+    <html lang="en" className={`${display.variable} h-full antialiased`} suppressHydrationWarning>
+      <head>
+        <InlineScript html={THEME_SCRIPT} />
+      </head>
       <body className="flex min-h-full flex-col font-sans">{children}</body>
     </html>
   )

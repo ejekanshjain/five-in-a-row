@@ -2,11 +2,9 @@ import type { CSSProperties } from 'react'
 
 import type { Seat } from '@/lib/game'
 
-const COLORS: Record<Seat, string> = {
-  p1: 'bg-p1 shadow-[inset_0_-4px_0_rgb(0_0_0/0.25)]',
-  p2: 'bg-p2 shadow-[inset_0_-4px_0_rgb(0_0_0/0.25)]'
-}
+type Props = { seat: Seat; className?: string; style?: CSSProperties; win?: boolean }
 
-export function Disc({ seat, className = '', style }: { seat: Seat; className?: string; style?: CSSProperties }) {
-  return <span className={`block rounded-full ${COLORS[seat]} ${className}`} style={style} />
+// A glossy game disc. Styling lives in the .disc rules in globals.css.
+export function Disc({ seat, className = '', style, win }: Props) {
+  return <span className={`disc ${className}`} data-seat={seat} data-win={win || undefined} style={style} />
 }

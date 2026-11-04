@@ -1,6 +1,6 @@
 # 5 in a Row
 
-A real-time, two-player game. Players take turns dropping discs into a 9 by 8 board, and the first to line up five across, down, or diagonally wins.
+A real-time, two-player game. Players take turns dropping discs into a 10 by 8 board, and the first to line up five across, down, or diagonally wins.
 
 ## How It Works
 
