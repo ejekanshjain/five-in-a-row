@@ -2,6 +2,16 @@
 
 A real-time, two-player game. Players take turns dropping discs into a 10 by 8 board, and the first to line up five across, down, or diagonally wins.
 
+## Power-Ups
+
+At the start of each round, the server deals each player one secret power-up. Only its owner sees it until they use it. You can use it once per round, in place of dropping a disc:
+
+- **Hammer:** smash any disc or brick. Everything above it falls one space.
+- **Brick:** drop a stone that belongs to nobody. It blocks lines for the rest of the round.
+- **Gravity Flip:** turn the board upside down. Every column falls back in reverse order.
+
+If a Hammer or Gravity Flip gives both players five in a row at once, the player who used it wins.
+
 ## How It Works
 
 - Next.js route handlers enforce every rule. Browsers only send actions and render the state they get back.

@@ -7,28 +7,41 @@ import { useCallback, useEffect, useState } from 'react'
 import { Board } from '@/components/board'
 import { Disc } from '@/components/disc'
 import { NameForm } from '@/components/name-form'
+import { PowerBadge, PowerIcon, type PowerMode, PowerPanel } from '@/components/power-ups'
 import { ThemeToggle } from '@/components/theme-toggle'
 import { postJson } from '@/lib/api'
-import { COLS, other, type PublicGame, type Seat } from '@/lib/game'
+import { COLS, other, type PowerKind, type PublicGame, type Seat } from '@/lib/game'
 import { gameChannel } from '@/lib/realtime'
 
-type Props = { initialGame: PublicGame; initialYou: Seat | null }
-type GameResponse = { game: PublicGame; you?: Seat | null }
+type Props = { initialGame: PublicGame; initialYou: Seat | null; initialPower: PowerKind | null }
+type GameResponse = { game: PublicGame; you?: Seat | null; power?: PowerKind | null }
 
 // Live game screen. The server owns the game: this component sends actions to the API and
 // renders whatever state the server sends back or broadcasts through Pusher.
-export function GameRoom({ initialGame, initialYou }: Props) {
+export function GameRoom({ initialGame, initialYou, initialPower }: Props) {
   const gameId = initialGame.id
   const [game, setGame] = useState(initialGame)
   const [you, setYou] = useState(initialYou)
   const [online, setOnline] = useState<Seat[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Your secret power-up, tagged with the round it was dealt for.
+  const [power, setPower] = useState({ round: initialGame.round, kind: initialPower })
+  const [mode, setMode] = useState<PowerMode>('drop')
 
   // Broadcasts and API responses can arrive in either order, so keep the newest version.
   const apply = useCallback((next: PublicGame) => {
     setGame(current => (next.version >= current.version ? next : current))
   }, [])
+
+  // Loads the latest state plus your secret power-up, which broadcasts never include.
+  const refresh = useCallback(async () => {
+    const res = await fetch(`/api/games/${gameId}`, { cache: 'no-store' })
+    if (!res.ok) return
+    const data = (await res.json()) as GameResponse
+    apply(data.game)
+    setPower({ round: data.game.round, kind: data.power ?? null })
+  }, [gameId, apply])
 
   // Reconnects whenever `you` changes, so joining re-enters the channel as a player, not a spectator.
   useEffect(() => {
@@ -46,22 +59,19 @@ export function GameRoom({ initialGame, initialYou }: Props) {
       setOnline(seats)
     }
     // Catch up on anything broadcast before this subscription started or while disconnected.
-    const refresh = async () => {
-      const res = await fetch(`/api/games/${gameId}`, { cache: 'no-store' })
-      if (!res.ok) return
-      const data = (await res.json()) as GameResponse
-      apply(data.game)
-    }
-
     channel.bind('pusher:subscription_succeeded', () => {
       syncMembers()
       void refresh()
     })
     channel.bind('pusher:member_added', syncMembers)
     channel.bind('pusher:member_removed', syncMembers)
-    channel.bind('state', apply)
+    channel.bind('state', (next: PublicGame) => {
+      apply(next)
+      // A fresh round (after joining or a rematch) deals new power-ups, so fetch yours.
+      if (next.status === 'playing' && !next.lastAction) void refresh()
+    })
     return () => pusher.disconnect()
-  }, [gameId, you, apply])
+  }, [gameId, you, apply, refresh])
 
   const send = useCallback(
     async (action: string, body?: object) => {
@@ -71,6 +81,8 @@ export function GameRoom({ initialGame, initialYou }: Props) {
         const data = await postJson<GameResponse>(`/api/games/${gameId}/${action}`, body)
         apply(data.game)
         if (data.you) setYou(data.you)
+        if (data.power !== undefined) setPower({ round: data.game.round, kind: data.power })
+        setMode('drop')
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Something went wrong. Try again.')
       } finally {
@@ -81,18 +93,36 @@ export function GameRoom({ initialGame, initialYou }: Props) {
   )
 
   const canMove = game.status === 'playing' && game.turn === you && !busy
+  // Ignore a power-up dealt for an earlier round while the new one loads.
+  const myPower = power.round === game.round ? power.kind : null
+  const powerUsed = you ? !!game.powerUsed[you] : true
+  const canUsePower = canMove && !powerUsed && !!myPower
+  // Aiming only lasts while you can still use the power-up.
+  const activeMode: PowerMode = canUsePower ? mode : 'drop'
 
-  // Keys 1 to 9 drop into those columns, and 0 drops into column 10.
+  const onColumn = useCallback(
+    (col: number) => (activeMode === 'brick' ? send('power', { target: col }) : send('move', { column: col })),
+    [activeMode, send]
+  )
+
+  // Keys 1 to 9 pick those columns, 0 picks column 10, and Esc cancels aiming a power-up.
   useEffect(() => {
     if (!canMove) return
     const onKey = (event: KeyboardEvent) => {
-      if (event.target instanceof HTMLInputElement || !/^\d$/.test(event.key)) return
+      if (event.target instanceof HTMLInputElement) return
+      if (event.key === 'Escape') return setMode('drop')
+      if (!/^\d$/.test(event.key) || activeMode === 'hammer') return
       const col = event.key === '0' ? 9 : Number(event.key) - 1
-      if (col < COLS) void send('move', { column: col })
+      if (col < COLS) void onColumn(col)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [canMove, send])
+  }, [canMove, activeMode, onColumn])
+
+  function usePowerUp() {
+    if (myPower === 'flip') void send('power')
+    else if (myPower) setMode(myPower)
+  }
 
   const finished = game.status === 'won' || game.status === 'draw'
 
@@ -109,12 +139,13 @@ export function GameRoom({ initialGame, initialYou }: Props) {
       </header>
 
       <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2 sm:gap-4">
-        <PlayerCard game={game} seat="p1" you={you} online={online.includes('p1')} />
+        <PlayerCard game={game} seat="p1" you={you} power={myPower} online={online.includes('p1')} />
         <span className="text-lg font-extrabold text-muted">vs</span>
-        <PlayerCard game={game} seat="p2" you={you} online={online.includes('p2')} />
+        <PlayerCard game={game} seat="p2" you={you} power={myPower} online={online.includes('p2')} />
       </div>
 
       <section aria-live="polite" className="flex min-h-20 flex-col items-center justify-center gap-3 text-center">
+        <Announcement game={game} you={you} />
         <Status game={game} you={you} />
         {!you && game.status === 'waiting' && (
           <div className="w-full max-w-sm text-left">
@@ -129,13 +160,55 @@ export function GameRoom({ initialGame, initialYou }: Props) {
         )}
       </section>
 
-      <Board game={game} you={you} canMove={canMove} onDrop={col => send('move', { column: col })} />
+      {you && myPower && game.status !== 'won' && game.status !== 'draw' && (
+        <PowerPanel
+          power={myPower}
+          used={powerUsed}
+          canUse={canUsePower}
+          mode={activeMode}
+          onUse={usePowerUp}
+          onCancel={() => setMode('drop')}
+        />
+      )}
+
+      <Board
+        game={game}
+        you={you}
+        canMove={canMove}
+        mode={activeMode}
+        onColumn={onColumn}
+        onSmash={index => send('power', { target: index })}
+      />
 
       <p className="text-center text-sm text-muted">
-        {canMove ? 'Click a column, or press 1 to 9 (0 is column 10).' : 'Line up five across, down, or diagonally.'}
+        {canMove && activeMode === 'drop'
+          ? 'Click a column, or press 1 to 9 (0 is column 10).'
+          : 'Line up five across, down, or diagonally.'}
         {game.score.draws > 0 && ` Draws so far: ${game.score.draws}.`}
       </p>
     </>
+  )
+}
+
+const ANNOUNCEMENTS: Record<PowerKind, string> = {
+  hammer: 'smashed a piece with the Hammer!',
+  brick: 'dropped a Brick!',
+  flip: 'flipped the board!'
+}
+
+// Calls out the power-up used on the last turn, so nobody misses why the board changed.
+function Announcement({ game, you }: { game: PublicGame; you: Seat | null }) {
+  const action = game.lastAction
+  if (!action || action.kind === 'drop') return null
+  const who = action.seat === you ? 'You' : (game.players[action.seat]?.name ?? 'Player')
+  return (
+    <p
+      key={game.version}
+      className="pop inline-flex items-center gap-2 rounded-full border-3 border-line bg-win px-3.5 py-1 font-extrabold text-on-accent"
+    >
+      <PowerIcon kind={action.kind} className="size-5" />
+      {who} {ANNOUNCEMENTS[action.kind]}
+    </p>
   )
 }
 
@@ -185,7 +258,9 @@ function Status({ game, you }: { game: PublicGame; you: Seat | null }) {
   )
 }
 
-function PlayerCard({ game, seat, you, online }: { game: PublicGame; seat: Seat; you: Seat | null; online: boolean }) {
+type CardProps = { game: PublicGame; seat: Seat; you: Seat | null; power: PowerKind | null; online: boolean }
+
+function PlayerCard({ game, seat, you, power, online }: CardProps) {
   const player = game.players[seat]
   const active = game.status === 'playing' && game.turn === seat
   const winner = game.winner === seat
@@ -196,7 +271,10 @@ function PlayerCard({ game, seat, you, online }: { game: PublicGame; seat: Seat;
         background: active || winner ? `color-mix(in srgb, var(--${seat}) 24%, var(--surface))` : 'var(--surface)'
       }}
     >
-      <Disc seat={seat} className={`size-9 shrink-0 sm:size-11 ${active ? 'bob' : ''}`} />
+      <span className="relative shrink-0">
+        <Disc seat={seat} className={`size-9 sm:size-11 ${active ? 'bob' : ''}`} />
+        {player && game.status !== 'waiting' && <PowerBadge game={game} seat={seat} you={you} power={power} />}
+      </span>
       <div className="min-w-0 flex-1">
         <p className="truncate font-extrabold">{player?.name ?? 'Open seat'}</p>
         <p className="flex items-center gap-1.5 text-xs font-semibold text-muted">

@@ -1,10 +1,11 @@
 import { cleanName, GameError, seatOf, toPublic } from '@/lib/game'
 import { checkGameId, route, readJson } from '@/lib/server/http'
 import { ensurePlayerId } from '@/lib/server/player'
+import { drawPower } from '@/lib/server/powers'
 import { broadcast } from '@/lib/server/realtime'
 import { updateGame } from '@/lib/server/store'
 
-// Takes the open second seat and starts the game. Body: { name }.
+// Takes the open second seat, deals a secret power-up, and starts the game. Body: { name }.
 export const POST = route(async (request: Request, ctx: RouteContext<'/api/games/[id]/join'>) => {
   const { id } = await ctx.params
   checkGameId(id)
@@ -15,8 +16,9 @@ export const POST = route(async (request: Request, ctx: RouteContext<'/api/games
     if (seatOf(game, playerId)) throw new GameError('You are already in this game.', 409)
     if (game.players.p2) throw new GameError('This game already has two players.', 409)
     game.players.p2 = { id: playerId, name }
+    game.powers.p2 = drawPower()
     game.status = 'playing'
   })
   await broadcast(game)
-  return Response.json({ game: toPublic(game), you: 'p2' })
+  return Response.json({ game: toPublic(game), you: 'p2', power: game.powers.p2 })
 })

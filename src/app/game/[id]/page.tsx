@@ -24,5 +24,8 @@ async function Room({ params }: Pick<PageProps<'/game/[id]'>, 'params'>) {
   const game = await loadGame(id)
   if (!game) notFound()
 
-  return <GameRoom key={id} initialGame={toPublic(game)} initialYou={seatOf(game, await getPlayerId())} />
+  const you = seatOf(game, await getPlayerId())
+  return (
+    <GameRoom key={id} initialGame={toPublic(game)} initialYou={you} initialPower={you ? game.powers[you] : null} />
+  )
 }
